@@ -55,34 +55,98 @@ Both models train on `karpathy/tinystories-gpt4-clean`, a set of very simple sho
 
 ## Files
 
+- `run.py` (`run.sh` / `run.bat`) is the root entry point. YAML configs live in `configs/`.
 - `diffusion_sedd/` and `diffusion_mdlm/` each contain their own copy of the model script (`ton-v1-sedd.py` / `ton-v1-mdlm.py`), generation script (`gen.py` / `gen_mdlm.py`), inference benchmark script (`bench_gen.py` / `bench_gen_mdlm.py`), autoresearch plotting script (`plot_progress.py` / `plot_progress_mdlm.py`), experiment log (`results.tsv` / `results_v2.tsv`), autoresearch progress graph, training loss curve, generated story samples, timing benchmark JSON, and best model checkpoint.
+- `diffusion_mdlm/` also has ONNX/TensorRT scripts: `export_onnx.py`, `collect_calib.py`, `build_trt.py`, `infer_trt.py`, `bench_gen_trt.py`.
 - `tinystories_gpt2_full.bin` at the repo root is the tokenized dataset, shared by both folders.
-- `analyze_gemma.py` / `diffusionGemma_layers.json` are unrelated: notes from analyzing Google DeepMind's DiffusionGemma model.
 
 If you want inference timings, memory usage, or the raw sample outputs for either experiment, they're in that experiment's folder: `diffusion_sedd/gen_timing.json` and `diffusion_mdlm/gen_timing_mdlm.json` for benchmarks, `generated_samples*.txt` for stories.
 
 ## Commands
 
-You need a venv with PyTorch (CUDA), tiktoken, datasets, numpy, matplotlib, and transformers installed.
+You need a venv with PyTorch (CUDA), tiktoken, datasets, numpy, matplotlib, transformers, and PyYAML installed.
 
-Both scripts expect to be run from inside their own folder (so they find the shared dataset cache one directory up, and save checkpoints locally).
+From the repo root, `run.py` (or `run.sh` / `run.bat`) reads a YAML config and runs training or inference in the matching experiment folder. Copy a file in `configs/` and edit it, or overlay a few flags on the CLI.
 
-**SEDD:**
+**Train**
+
+```
+python run.py train --config configs/train_mdlm.yaml
+python run.py train --config configs/train_sedd.yaml
+```
+
+**Infer (PyTorch / CUDA)**
+
+```
+python run.py infer --config configs/infer_mdlm.yaml
+python run.py infer --config configs/infer_sedd.yaml
+python run.py infer --config configs/infer_mdlm.yaml --steps 128 --n-samples 4
+```
+
+Checkpoint paths in the YAML are relative to `diffusion_mdlm/` or `diffusion_sedd/`. Knobs: `steps`, `n_samples`, `device`, `topk` (MDLM), `ckpt`.
+
+**Bench**
+
+Same infer YAML (ckpt / steps / backend). Defaults to 1 sample × 20 runs so the numbers match the existing timing JSONs. SEDD is PyTorch only.
+
+```
+python run.py bench --config configs/infer_sedd.yaml
+python run.py bench --config configs/infer_mdlm.yaml
+python run.py bench --config configs/infer_mdlm.yaml --backend tensorrt --precision fp16
+python run.py bench --config configs/infer_sedd.yaml --steps 128 --n-runs 20
+```
+
+Writes `diffusion_sedd/gen_timing.json`, `diffusion_mdlm/gen_timing_mdlm.json`, or `mdlm_best_fp16_timing.json` for TRT.
+
+**Infer (TensorRT, MDLM only)**
+
+Requires TensorRT 10+ and `onnx`, `onnxruntime-gpu`, `nvidia-modelopt`, `tensorrt`. `precision` is `fp32`, `fp16`, `bf16`, or `fp8`. Missing ONNX/engine (and `calib.npz` for fp8) are built automatically; pass `--rebuild` to force a rebuild.
+
+```
+python run.py infer --config configs/infer_mdlm.yaml --backend tensorrt --precision fp16
+python run.py infer --config configs/infer_mdlm.yaml --backend tensorrt --precision fp8
+```
+
+SEDD has no TensorRT path yet (`backend: tensorrt` will error).
+
+### Direct scripts (optional)
+
+The experiment folders still work if you `cd` into them (dataset cache is `../tinystories_gpt2_full.bin`, checkpoints stay local):
 
 ```
 cd diffusion_sedd
-python ton-v1-sedd.py       # train (resumes automatically from ckpt_full.pt if present)
-python gen.py                # generate stories from ckpt_full.pt
-python bench_gen.py           # benchmark generation timing/memory -> gen_timing.json
+python ton-v1-sedd.py       # train (resumes from ckpt_full.pt)
+python gen.py               # generate from ckpt_full.pt
+python bench_gen.py         # -> gen_timing.json
+
+cd ../diffusion_mdlm
+python ton-v1-mdlm.py       # train (resumes from ckpt_mdlm.pt)
+python gen_mdlm.py          # generate from ckpt_mdlm_best.pt
+python bench_gen_mdlm.py    # -> gen_timing_mdlm.json
 ```
 
-**MDLM:**
+Low-level TensorRT (all from `diffusion_mdlm/`, with `ckpt_mdlm_best.pt` present):
 
 ```
-cd diffusion_mdlm
-python ton-v1-mdlm.py       # train (resumes automatically from ckpt_mdlm.pt if present)
-python gen_mdlm.py           # generate stories from ckpt_mdlm_best.pt
-python bench_gen_mdlm.py      # benchmark generation timing/memory -> gen_timing_mdlm.json
+python export_onnx.py --ckpt ckpt_mdlm_best.pt --out mdlm_best.onnx
+python collect_calib.py --seeds 16 --steps 128   # fp8 only -> calib.npz
+python build_trt.py --precision fp16             # -> mdlm_best_fp16.engine
+python build_trt.py --precision fp8 --calib calib.npz
+python infer_trt.py --engine mdlm_best_fp16.engine --compare-pytorch
+python bench_gen_trt.py --engine mdlm_best_fp16.engine
+python bench_gen_trt.py --engine mdlm_best_fp16.engine --print --n-samples 6
 ```
+
+`--max-samples 512` on `build_trt.py` subsamples `calib.npz` for faster fp8 builds. `infer_trt.py` times one forward pass; `bench_gen_trt.py` times full generation (JSON) or `--print`s stories. Top-k sampling still runs in PyTorch.
+
+On an RTX 4060 Laptop GPU (1 sample, 256 steps, 20 runs):
+
+| Backend | Total (ms) | Per-step (ms) | Peak GPU mem | Engine size |
+|---------|-----------|---------------|--------------|-------------|
+| PyTorch | 4293 ± 138 | 16.76 ± 0.54 | 1330 MB | — |
+| TRT FP16 | 1037 ± 10 | 4.05 ± 0.04 | 77 MB | 208 MB |
+| TRT FP8 | 1008 ± 83 | 3.94 ± 0.33 | 103 MB | 138 MB |
+
+TensorRT cuts end-to-end generation time by about **4.1×** (FP16) or **4.3×** (FP8) vs the PyTorch checkpoint, and peak GPU memory by roughly **17×** (the full 309 MB model weights are no longer resident). FP8 shrinks the engine by ~33% vs FP16 (138 MB vs 208 MB) with similar mean latency, but FP16 has much lower variance and is the safer default; FP8 logits can occasionally drift enough to need `nan_to_num` before sampling.
 
 Both training scripts print inference at the end of the run (starting from random noise or all-`[MASK]`, running the denoising steps, printing one generated story) and save a loss curve.

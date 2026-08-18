@@ -1,3 +1,4 @@
+import argparse
 import sys, math, torch, tiktoken
 import torch.nn as nn
 import torch.nn.functional as F
@@ -94,33 +95,53 @@ class BLM(nn.Module):
         return self.lm_head(self.ln(x))
 
     @torch.no_grad()
-    def generate(self, n_samples, steps=128):
+    def generate(self, n_samples, steps=128, k=20):
         # MDLM reverse process: start all [MASK], progressively unmask to predicted tokens.
         x = torch.full((n_samples, block_size), mask_id, device=device)
         ts = torch.linspace(1.0, 0.0, steps + 1, device=device)
         for i in range(steps):
             t = ts[i].expand(n_samples)
-            x0_hat = topk_sample(self(x, t))
+            x0_hat = topk_sample(self(x, t), k)
             is_mask = x == mask_id
             unmask_p = (ts[i] - ts[i + 1]) / ts[i].clamp_min(1e-6)
             do = is_mask & (torch.rand(x.shape, device=device) < unmask_p)
             x = torch.where(do, x0_hat, x)
         is_mask = x == mask_id
         if is_mask.any():
-            x0_hat = topk_sample(self(x, ts[-1].expand(n_samples)))
+            x0_hat = topk_sample(self(x, ts[-1].expand(n_samples)), k)
             x = torch.where(is_mask, x0_hat, x)
         return x
 
-torch.manual_seed(0)
-model = BLM().to(device)
-ck = torch.load('ckpt_mdlm_best.pt', map_location=device, weights_only=False)
-model.load_state_dict(ck['model'])
-print(f"loaded ckpt @ step {ck['epoch']} | best_val {ck['best_val']:.2f}")
-model.eval()
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    p.add_argument('--config', default=None)
+    p.add_argument('--ckpt', default=None)
+    p.add_argument('--steps', type=int, default=None)
+    p.add_argument('--n-samples', dest='n_samples', type=int, default=None)
+    p.add_argument('--device', default=None)
+    p.add_argument('--topk', type=int, default=None)
+    args = p.parse_args()
+    cfg = {}
+    if args.config:
+        import yaml
+        cfg = yaml.safe_load(open(args.config, encoding='utf-8')) or {}
+    ckpt = args.ckpt or cfg.get('ckpt') or 'ckpt_mdlm_best.pt'
+    steps = args.steps or cfg.get('steps') or 256
+    n_samples = args.n_samples or cfg.get('n_samples') or 6
+    topk = args.topk or cfg.get('topk') or 20
+    device = args.device or cfg.get('device') or device
+    if device == 'cuda' and not torch.cuda.is_available():
+        device = 'cpu'
 
-for steps in (128, 256):
+    torch.manual_seed(0)
+    model = BLM().to(device)
+    ck = torch.load(ckpt, map_location=device, weights_only=False)
+    model.load_state_dict(ck['model'])
+    print(f"loaded {ckpt} @ step {ck['epoch']} | best_val {ck['best_val']:.2f}")
+    model.eval()
+
     print(f"\n{'='*70}\n{steps} denoising steps\n{'='*70}")
-    out = model.generate(n_samples=6, steps=steps)
+    out = model.generate(n_samples=n_samples, steps=steps, k=topk)
     for j, row in enumerate(out.tolist()):
         print(f"\n--- sample {j+1} ({steps} steps) ---")
         print(decode(row))

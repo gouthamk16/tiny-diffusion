@@ -1,0 +1,214 @@
+{
+  "config": {
+    "engine": "mdlm_best_fp8.engine",
+    "engine_size_mb": 138.1,
+    "n_samples": 1,
+    "denoising_steps": 256,
+    "block_size": 128,
+    "device": "cuda",
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU"
+  },
+  "note": "TensorRT MDLM generation benchmark. 'prefill' = first denoising step, 'decode' = remaining steps. Sampling/top-k runs on GPU in PyTorch.",
+  "cold_start_total_ms": 1182.0782999857329,
+  "n_runs": 20,
+  "summary": {
+    "prefill_ms": {
+      "mean": 4.088469999260269,
+      "std": 0.41729896015290824,
+      "min": 3.622199990786612,
+      "max": 5.4570999927818775
+    },
+    "decode_ms": {
+      "mean": 1003.6719449941302,
+      "std": 82.90186492616057,
+      "min": 937.1913000068162,
+      "max": 1280.692700005602
+    },
+    "decode_per_step_ms": {
+      "mean": 3.935968411741687,
+      "std": 0.32510535265161006,
+      "min": 3.67526000002673,
+      "max": 5.022324313747459
+    },
+    "total_ms": {
+      "mean": 1007.7604149933904,
+      "std": 83.04344740376759,
+      "min": 941.1653999995906,
+      "max": 1284.5285000221338
+    },
+    "peak_mem_alloc_mb": {
+      "mean": 102.942208,
+      "std": 0.0,
+      "min": 102.942208,
+      "max": 102.942208
+    },
+    "peak_mem_reserved_mb": {
+      "mean": 111.149056,
+      "std": 0.0,
+      "min": 111.149056,
+      "max": 111.149056
+    }
+  },
+  "runs": [
+    {
+      "prefill_ms": 3.622199990786612,
+      "decode_ms": 958.750300022075,
+      "total_ms": 962.3725000128616,
+      "decode_per_step_ms": 3.759805098125784,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.9627999940421432,
+      "decode_ms": 964.111299981596,
+      "total_ms": 968.0740999756381,
+      "decode_per_step_ms": 3.7808286273788076,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.852900001220405,
+      "decode_ms": 985.7439999759663,
+      "total_ms": 989.5968999771867,
+      "decode_per_step_ms": 3.8656627450037893,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 4.275800019968301,
+      "decode_ms": 946.4598000049591,
+      "total_ms": 950.7356000249274,
+      "decode_per_step_ms": 3.711607058842977,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.953700012061745,
+      "decode_ms": 948.2613000145648,
+      "total_ms": 952.2150000266265,
+      "decode_per_step_ms": 3.718671764762999,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.9213999989442527,
+      "decode_ms": 948.1924999854527,
+      "total_ms": 952.113899984397,
+      "decode_per_step_ms": 3.718401960727266,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.767000016523525,
+      "decode_ms": 982.9964999807999,
+      "total_ms": 986.7634999973234,
+      "decode_per_step_ms": 3.854888235218823,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 4.199399991193786,
+      "decode_ms": 1098.7637999933213,
+      "total_ms": 1102.963199984515,
+      "decode_per_step_ms": 4.308877647032633,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 4.139299999224022,
+      "decode_ms": 951.2950999778695,
+      "total_ms": 955.4343999770936,
+      "decode_per_step_ms": 3.7305690195210572,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 4.370899987407029,
+      "decode_ms": 1020.4262000042945,
+      "total_ms": 1024.7970999917015,
+      "decode_per_step_ms": 4.001671372565861,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.7702000117860734,
+      "decode_ms": 999.0213999990374,
+      "total_ms": 1002.7916000108235,
+      "decode_per_step_ms": 3.9177309803883817,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 4.846600000746548,
+      "decode_ms": 1021.6090999892913,
+      "total_ms": 1026.4556999900378,
+      "decode_per_step_ms": 4.006310196036436,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.9810999878682196,
+      "decode_ms": 1021.8329000053927,
+      "total_ms": 1025.813999993261,
+      "decode_per_step_ms": 4.007187843158403,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 4.3280999816488475,
+      "decode_ms": 1060.063099983381,
+      "total_ms": 1064.39119996503,
+      "decode_per_step_ms": 4.157110196013259,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.8358000165317208,
+      "decode_ms": 1280.692700005602,
+      "total_ms": 1284.5285000221338,
+      "decode_per_step_ms": 5.022324313747459,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 5.4570999927818775,
+      "decode_ms": 1125.238199980231,
+      "total_ms": 1130.6952999730129,
+      "decode_per_step_ms": 4.412698823451886,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.944299998693168,
+      "decode_ms": 937.2755999793299,
+      "total_ms": 941.219899978023,
+      "decode_per_step_ms": 3.675590588154235,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.974099992774427,
+      "decode_ms": 937.1913000068162,
+      "total_ms": 941.1653999995906,
+      "decode_per_step_ms": 3.67526000002673,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.8634999946225435,
+      "decode_ms": 945.3084999986459,
+      "total_ms": 949.1719999932684,
+      "decode_per_step_ms": 3.707092156857435,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    },
+    {
+      "prefill_ms": 3.7031999963801354,
+      "decode_ms": 940.205299993977,
+      "total_ms": 943.9084999903571,
+      "decode_per_step_ms": 3.6870796078195176,
+      "peak_mem_alloc_mb": 102.942208,
+      "peak_mem_reserved_mb": 111.149056
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import os
 import sys
 import math
 import time
+import argparse
 import numpy as np
 import tiktoken
 
@@ -97,6 +98,33 @@ lr = 3e-3
 min_lr = 3e-5
 warmup_steps = 100
 gen_steps = 256
+CKPT = 'ckpt_mdlm.pt'
+BEST = 'ckpt_mdlm_best.pt'
+
+
+def _apply_train_config():
+    p = argparse.ArgumentParser()
+    p.add_argument('--config', default=None)
+    args, _ = p.parse_known_args()
+    if not args.config:
+        return
+    import yaml
+    cfg = yaml.safe_load(open(args.config, encoding='utf-8')) or {}
+    g = globals()
+    for src in (cfg.get('train') or {}, cfg.get('arch') or {}):
+        for k, v in src.items():
+            if k in g and v is not None:
+                g[k] = v
+    ck = cfg.get('ckpt') or {}
+    if ck.get('latest'):
+        g['CKPT'] = ck['latest']
+    if ck.get('best'):
+        g['BEST'] = ck['best']
+    if cfg.get('seed') is not None:
+        torch.manual_seed(cfg['seed'])
+
+
+_apply_train_config()
 
 
 def lr_at(step):
@@ -327,9 +355,6 @@ def gen_quality(n_samples=8, steps=gen_steps):
             bg.add((r[j], r[j + 1])); tot += 1
     return ppl, len(bg) / max(1, tot), x
 
-
-CKPT = 'ckpt_mdlm.pt'          # latest (for resume across kills)
-BEST = 'ckpt_mdlm_best.pt'     # best-val model so far
 
 def save_ckpt(path, epoch, best_val):
     tmp = path + '.tmp'

@@ -2,6 +2,7 @@ import os
 import sys
 import math
 import time
+import argparse
 import numpy as np
 import tiktoken
 
@@ -98,6 +99,29 @@ warmup_steps = 100
 gen_steps = 128
 checkpoint_interval = 1000
 CKPT = 'ckpt_full.pt'
+
+
+def _apply_train_config():
+    p = argparse.ArgumentParser()
+    p.add_argument('--config', default=None)
+    args, _ = p.parse_known_args()
+    if not args.config:
+        return
+    import yaml
+    cfg = yaml.safe_load(open(args.config, encoding='utf-8')) or {}
+    g = globals()
+    for src in (cfg.get('train') or {}, cfg.get('arch') or {}):
+        for k, v in src.items():
+            if k in g and v is not None:
+                g[k] = v
+    ck = cfg.get('ckpt') or {}
+    if ck.get('latest'):
+        g['CKPT'] = ck['latest']
+    if cfg.get('seed') is not None:
+        torch.manual_seed(cfg['seed'])
+
+
+_apply_train_config()
 
 
 def lr_at(step):

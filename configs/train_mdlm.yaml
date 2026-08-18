@@ -1,0 +1,20 @@
+model: mdlm
+seed: 1337
+train:
+  batch_size: 16
+  block_size: 128
+  epochs: 100000
+  lr: 3.0e-3
+  min_lr: 3.0e-5
+  warmup_steps: 100
+  eval_interval: 1000
+  eval_iters: 40
+  gen_steps: 256
+arch:
+  n_embed: 512
+  n_layers: 6
+  n_heads: 16
+  drop_rate: 0.0
+ckpt:
+  latest: ckpt_mdlm.pt
+  best: ckpt_mdlm_best.pt

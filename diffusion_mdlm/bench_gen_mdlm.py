@@ -125,54 +125,71 @@ def timed_generate(model, n_samples, steps, track_mem=True):
     peak_r = torch.cuda.max_memory_reserved() / 1e6 if device == 'cuda' else 0.0
     return prefill, decode, peak_a, peak_r
 
-N_RUNS, N_SAMPLES, STEPS = 20, 1, 256  # 256 steps = the tuned best for MDLM
+if __name__ == '__main__':
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument('--config', default=None)
+    p.add_argument('--ckpt', default=None)
+    p.add_argument('--steps', type=int, default=None)
+    p.add_argument('--n-samples', dest='n_samples', type=int, default=None)
+    p.add_argument('--n-runs', dest='n_runs', type=int, default=None)
+    p.add_argument('--out', default=None)
+    args = p.parse_args()
+    cfg = {}
+    if args.config:
+        import yaml
+        cfg = yaml.safe_load(open(args.config, encoding='utf-8')) or {}
+    N_RUNS = args.n_runs or cfg.get('n_runs') or 20
+    N_SAMPLES = args.n_samples or cfg.get('n_samples') or 1
+    STEPS = args.steps or cfg.get('steps') or 256
+    ckpt = args.ckpt or cfg.get('ckpt') or 'ckpt_mdlm_best.pt'
+    out_path = args.out or 'gen_timing_mdlm.json'
 
-torch.manual_seed(0)
-model = BLM().to(device)
-ck = torch.load('ckpt_mdlm_best.pt', map_location=device, weights_only=False)
-model.load_state_dict(ck['model'])
-model.eval()
-param_mem = sum(p.numel() * p.element_size() for p in model.parameters()) / 1e6
+    torch.manual_seed(0)
+    model = BLM().to(device)
+    ck = torch.load(ckpt, map_location=device, weights_only=False)
+    model.load_state_dict(ck['model'])
+    model.eval()
+    param_mem = sum(p.numel() * p.element_size() for p in model.parameters()) / 1e6
 
-# cold-start run (includes one-time CUDA kernel init), then 2 warmups
-cold_pf, cold_dc, _, _ = timed_generate(model, N_SAMPLES, STEPS, track_mem=False)
-cold_total = cold_pf + cold_dc
-for _ in range(2):
-    timed_generate(model, N_SAMPLES, STEPS, track_mem=False)
+    cold_pf, cold_dc, _, _ = timed_generate(model, N_SAMPLES, STEPS, track_mem=False)
+    cold_total = cold_pf + cold_dc
+    for _ in range(2):
+        timed_generate(model, N_SAMPLES, STEPS, track_mem=False)
 
-runs = []
-for _ in range(N_RUNS):
-    pf, dc, pa, pr = timed_generate(model, N_SAMPLES, STEPS)
-    runs.append({"prefill_ms": pf, "decode_ms": dc, "total_ms": pf + dc,
-                 "decode_per_step_ms": dc / (STEPS - 1),
-                 "peak_mem_alloc_mb": pa, "peak_mem_reserved_mb": pr})
+    runs = []
+    for _ in range(N_RUNS):
+        pf, dc, pa, pr = timed_generate(model, N_SAMPLES, STEPS)
+        runs.append({"prefill_ms": pf, "decode_ms": dc, "total_ms": pf + dc,
+                     "decode_per_step_ms": dc / (STEPS - 1),
+                     "peak_mem_alloc_mb": pa, "peak_mem_reserved_mb": pr})
 
-def summ(key):
-    v = [r[key] for r in runs]
-    return {"mean": st.mean(v), "std": st.pstdev(v), "min": min(v), "max": max(v)}
+    def summ(key):
+        v = [r[key] for r in runs]
+        return {"mean": st.mean(v), "std": st.pstdev(v), "min": min(v), "max": max(v)}
 
-out = {
-    "config": {"n_samples": N_SAMPLES, "denoising_steps": STEPS, "block_size": block_size,
-               "device": device, "gpu": torch.cuda.get_device_name(0) if device == 'cuda' else "cpu",
-               "checkpoint_step": int(ck['epoch']), "model_param_mem_mb": round(param_mem, 1)},
-    "note": ("MDLM absorbing diffusion: no prompt/KV-cache. Generation is `denoising_steps` "
-             "full-sequence bidirectional forward passes over a progressively unmasked sequence. "
-             "'prefill' = first denoising step, 'decode' = remaining steps."),
-    "cold_start_total_ms": cold_total,
-    "n_runs": N_RUNS,
-    "summary": {k: summ(k) for k in
-                ["prefill_ms", "decode_ms", "decode_per_step_ms", "total_ms",
-                 "peak_mem_alloc_mb", "peak_mem_reserved_mb"]},
-    "runs": runs,
-}
-json.dump(out, open('gen_timing_mdlm.json', 'w'), indent=2)
+    out = {
+        "config": {"n_samples": N_SAMPLES, "denoising_steps": STEPS, "block_size": block_size,
+                   "device": device, "gpu": torch.cuda.get_device_name(0) if device == 'cuda' else "cpu",
+                   "checkpoint_step": int(ck['epoch']), "model_param_mem_mb": round(param_mem, 1)},
+        "note": ("MDLM absorbing diffusion: no prompt/KV-cache. Generation is `denoising_steps` "
+                 "full-sequence bidirectional forward passes over a progressively unmasked sequence. "
+                 "'prefill' = first denoising step, 'decode' = remaining steps."),
+        "cold_start_total_ms": cold_total,
+        "n_runs": N_RUNS,
+        "summary": {k: summ(k) for k in
+                    ["prefill_ms", "decode_ms", "decode_per_step_ms", "total_ms",
+                     "peak_mem_alloc_mb", "peak_mem_reserved_mb"]},
+        "runs": runs,
+    }
+    json.dump(out, open(out_path, 'w'), indent=2)
 
-s = out["summary"]
-print(f"gpu: {out['config']['gpu']} | model params: {param_mem:.0f} MB")
-print(f"cold-start total: {cold_total:.1f} ms")
-print(f"prefill (1 step):   {s['prefill_ms']['mean']:.2f} +/- {s['prefill_ms']['std']:.2f} ms")
-print(f"decode ({STEPS-1} steps): {s['decode_ms']['mean']:.1f} +/- {s['decode_ms']['std']:.1f} ms "
-      f"({s['decode_per_step_ms']['mean']:.2f} ms/step)")
-print(f"total  ({STEPS} steps): {s['total_ms']['mean']:.1f} +/- {s['total_ms']['std']:.1f} ms")
-print(f"peak mem alloc: {s['peak_mem_alloc_mb']['mean']:.0f} MB | reserved: {s['peak_mem_reserved_mb']['mean']:.0f} MB")
-print("saved gen_timing_mdlm.json")
+    s = out["summary"]
+    print(f"gpu: {out['config']['gpu']} | model params: {param_mem:.0f} MB")
+    print(f"cold-start total: {cold_total:.1f} ms")
+    print(f"prefill (1 step):   {s['prefill_ms']['mean']:.2f} +/- {s['prefill_ms']['std']:.2f} ms")
+    print(f"decode ({STEPS-1} steps): {s['decode_ms']['mean']:.1f} +/- {s['decode_ms']['std']:.1f} ms "
+          f"({s['decode_per_step_ms']['mean']:.2f} ms/step)")
+    print(f"total  ({STEPS} steps): {s['total_ms']['mean']:.1f} +/- {s['total_ms']['std']:.1f} ms")
+    print(f"peak mem alloc: {s['peak_mem_alloc_mb']['mean']:.0f} MB | reserved: {s['peak_mem_reserved_mb']['mean']:.0f} MB")
+    print(f"saved {out_path}")
