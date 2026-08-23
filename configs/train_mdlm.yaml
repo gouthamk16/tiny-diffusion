@@ -16,5 +16,5 @@ arch:
   n_heads: 16
   drop_rate: 0.0
 ckpt:
-  latest: artifacts/ckpt.pt
-  best: artifacts/ckpt_best.pt
+  latest: artifacts/ton-v1-mdlm-latest.pt
+  best: artifacts/ton-v1-mdlm-best.pt

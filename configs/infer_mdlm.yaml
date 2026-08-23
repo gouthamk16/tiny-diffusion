@@ -1,7 +1,7 @@
 model: mdlm
 backend: torch
 device: cuda
-ckpt: artifacts/ckpt_best.pt
+ckpt: artifacts/ton-v1-mdlm-best.pt
 steps: 256
 n_samples: 6
 topk: 20

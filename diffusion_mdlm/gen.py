@@ -21,7 +21,7 @@ def main():
     if args.config:
         import yaml
         cfg = yaml.safe_load(open(args.config, encoding='utf-8')) or {}
-    ckpt = args.ckpt or cfg.get('ckpt') or 'artifacts/ckpt_best.pt'
+    ckpt = args.ckpt or cfg.get('ckpt') or 'artifacts/ton-v1-mdlm-best.pt'
     steps = args.steps or cfg.get('steps') or 256
     n_samples = args.n_samples or cfg.get('n_samples') or 6
     topk = args.topk or cfg.get('topk') or 20

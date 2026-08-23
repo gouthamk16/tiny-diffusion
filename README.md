@@ -114,20 +114,20 @@ The experiment folders still work if you `cd` into them (dataset cache is `../ti
 
 ```
 cd diffusion_sedd
-python train.py             # train (resumes from artifacts/ckpt.pt)
-python gen.py               # generate from artifacts/ckpt.pt
+python train.py             # train (resumes from artifacts/ton-v1-sedd-latest.pt)
+python gen.py               # generate from artifacts/ton-v1-sedd-latest.pt
 python bench.py             # -> artifacts/gen_timing.json
 
 cd ../diffusion_mdlm
-python train.py             # train (resumes from artifacts/ckpt.pt)
-python gen.py               # generate from artifacts/ckpt_best.pt
+python train.py             # train (resumes from artifacts/ton-v1-mdlm-latest.pt)
+python gen.py               # generate from artifacts/ton-v1-mdlm-best.pt
 python bench.py             # -> artifacts/gen_timing.json
 ```
 
-Low-level TensorRT (all from `diffusion_mdlm/`, with `artifacts/ckpt_best.pt` present):
+Low-level TensorRT (all from `diffusion_mdlm/`, with `artifacts/ton-v1-mdlm-best.pt` present):
 
 ```
-python trt/export_onnx.py --ckpt artifacts/ckpt_best.pt --out artifacts/mdlm_best.onnx
+python trt/export_onnx.py --ckpt artifacts/ton-v1-mdlm-best.pt --out artifacts/mdlm_best.onnx
 python trt/collect_calib.py --seeds 16 --steps 128   # fp8 only -> artifacts/calib.npz
 python trt/build.py --precision fp16                 # -> artifacts/mdlm_best_fp16.engine
 python trt/build.py --precision fp8 --calib artifacts/calib.npz

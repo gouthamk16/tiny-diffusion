@@ -66,7 +66,7 @@ def run_pytorch(batch: int, warmup: int, iters: int, ckpt: str):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--engine", default="artifacts/mdlm_best_fp16.engine")
-    p.add_argument("--ckpt", default="artifacts/ckpt_best.pt")
+    p.add_argument("--ckpt", default="artifacts/ton-v1-mdlm-best.pt")
     p.add_argument("--batch", type=int, default=1)
     p.add_argument("--warmup", type=int, default=20)
     p.add_argument("--iters", type=int, default=100)

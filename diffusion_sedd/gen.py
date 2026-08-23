@@ -20,7 +20,7 @@ def main():
     if args.config:
         import yaml
         cfg = yaml.safe_load(open(args.config, encoding='utf-8')) or {}
-    ckpt = args.ckpt or cfg.get('ckpt') or 'artifacts/ckpt.pt'
+    ckpt = args.ckpt or cfg.get('ckpt') or 'artifacts/ton-v1-sedd-latest.pt'
     steps = args.steps or cfg.get('steps') or 256
     n_samples = args.n_samples or cfg.get('n_samples') or 6
     device = args.device or cfg.get('device') or ('cuda' if torch.cuda.is_available() else 'cpu')

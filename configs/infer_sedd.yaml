@@ -1,6 +1,6 @@
 model: sedd
 backend: torch
 device: cuda
-ckpt: artifacts/ckpt.pt
+ckpt: artifacts/ton-v1-sedd-latest.pt
 steps: 256
 n_samples: 6

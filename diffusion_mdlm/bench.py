@@ -68,7 +68,7 @@ def main():
     n_runs = args.n_runs or cfg.get('n_runs') or 20
     n_samples = args.n_samples or cfg.get('n_samples') or 1
     steps = args.steps or cfg.get('steps') or 256
-    ckpt = args.ckpt or cfg.get('ckpt') or 'artifacts/ckpt_best.pt'
+    ckpt = args.ckpt or cfg.get('ckpt') or 'artifacts/ton-v1-mdlm-best.pt'
     out_path = args.out or 'artifacts/gen_timing.json'
 
     arch = cfg.get('arch') or {}

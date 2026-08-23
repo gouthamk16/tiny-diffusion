@@ -51,7 +51,7 @@ def collect(seeds: int, steps: int, batch: int, ckpt: str):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--ckpt", default="artifacts/ckpt_best.pt")
+    p.add_argument("--ckpt", default="artifacts/ton-v1-mdlm-best.pt")
     p.add_argument("--out", default="artifacts/calib.npz")
     p.add_argument("--seeds", type=int, default=16)
     p.add_argument("--steps", type=int, default=128)

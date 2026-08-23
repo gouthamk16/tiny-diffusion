@@ -49,7 +49,7 @@ def export(ckpt: str, out: str):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--ckpt", default="artifacts/ckpt_best.pt")
+    p.add_argument("--ckpt", default="artifacts/ton-v1-mdlm-best.pt")
     p.add_argument("--out", default="artifacts/mdlm_best.onnx")
     args = p.parse_args()
     export(args.ckpt, args.out)

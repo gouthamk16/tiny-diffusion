@@ -75,7 +75,7 @@ def trt_engine(cfg, args, cwd):
     if cfg.get("model") != "mdlm":
         sys.exit("TensorRT is only wired for MDLM")
     precision = cfg.get("precision", "fp16")
-    ckpt = cfg.get("ckpt", "artifacts/ckpt_best.pt")
+    ckpt = cfg.get("ckpt", "artifacts/ton-v1-mdlm-best.pt")
     onnx = cfg.get("onnx", "artifacts/mdlm_best.onnx")
     stem = Path(onnx).stem
     suffix = "" if precision == "fp32" else f"_{precision}"
