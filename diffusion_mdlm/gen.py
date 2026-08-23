@@ -15,14 +15,16 @@ def main():
     p.add_argument('--steps', type=int, default=None)
     p.add_argument('--n-samples', dest='n_samples', type=int, default=None)
     p.add_argument('--device', default=None)
+    p.add_argument('--topk', type=int, default=None)
     args = p.parse_args()
     cfg = {}
     if args.config:
         import yaml
         cfg = yaml.safe_load(open(args.config, encoding='utf-8')) or {}
-    ckpt = args.ckpt or cfg.get('ckpt') or 'artifacts/ckpt.pt'
+    ckpt = args.ckpt or cfg.get('ckpt') or 'artifacts/ckpt_best.pt'
     steps = args.steps or cfg.get('steps') or 256
     n_samples = args.n_samples or cfg.get('n_samples') or 6
+    topk = args.topk or cfg.get('topk') or 20
     device = args.device or cfg.get('device') or ('cuda' if torch.cuda.is_available() else 'cpu')
     if device == 'cuda' and not torch.cuda.is_available():
         device = 'cpu'
@@ -38,11 +40,11 @@ def main():
     ).to(device)
     ck = torch.load(ckpt, map_location=device, weights_only=False)
     model.load_state_dict(ck['model'])
-    print(f"loaded {ckpt} @ step {ck['epoch']}")
+    print(f"loaded {ckpt} @ step {ck['epoch']} | best_val {ck['best_val']:.2f}")
     model.eval()
 
     print(f"\n{'='*70}\n{steps} denoising steps\n{'='*70}")
-    out = model.generate(n_samples=n_samples, steps=steps)
+    out = model.generate(n_samples=n_samples, steps=steps, k=topk)
     for j, row in enumerate(out.tolist()):
         print(f"\n--- sample {j+1} ({steps} steps) ---")
         print(decode(row))

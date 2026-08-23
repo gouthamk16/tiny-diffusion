@@ -1,16 +1,17 @@
-import argparse
-import sys, math, torch, tiktoken
+import math
+
+import tiktoken
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-sys.stdout.reconfigure(encoding='utf-8')
 enc = tiktoken.get_encoding("gpt2")
 vocab_size = enc.n_vocab
 mask_id = vocab_size
 decode = lambda l: enc.decode([t for t in l if t < vocab_size])
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-block_size, n_embed, n_layers, n_heads, drop_rate = 128, 512, 6, 16, 0.0
+block_size = 128
+
 
 def timestep_embedding(t, dim, max_period=10000):
     half = dim // 2
@@ -18,20 +19,25 @@ def timestep_embedding(t, dim, max_period=10000):
     args = (t * 1000)[:, None] * freqs[None]
     return torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
 
+
 def apply_rope(x, cos, sin):
     hd = x.shape[-1]
     x1, x2 = x[..., :hd // 2], x[..., hd // 2:]
     return torch.cat([x1 * cos - x2 * sin, x2 * cos + x1 * sin], dim=-1)
+
 
 def topk_sample(logits, k=20):
     v = logits.topk(min(k, logits.size(-1)), dim=-1).values
     logits = logits.masked_fill(logits < v[..., -1:], float('-inf'))
     return torch.multinomial(F.softmax(logits, -1).view(-1, vocab_size), 1).view(logits.shape[:-1])
 
+
 class MultiHeadAttention(nn.Module):
-    def __init__(self, num_heads):
+    def __init__(self, n_embed, num_heads, block_size, drop_rate):
         super().__init__()
         self.n_heads = num_heads
+        self.n_embed = n_embed
+        self.drop_rate = drop_rate
         head_dim = n_embed // num_heads
         self.qkv = nn.Linear(n_embed, 3 * n_embed, bias=False)
         self.proj = nn.Linear(n_embed, n_embed)
@@ -46,49 +52,69 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, x):
         B, T, C = x.shape
-        q, k, v = self.qkv(x).split(n_embed, dim=2)
+        q, k, v = self.qkv(x).split(self.n_embed, dim=2)
         q = self.q_norm(q.view(B, T, self.n_heads, C // self.n_heads)).transpose(1, 2)
         k = self.k_norm(k.view(B, T, self.n_heads, C // self.n_heads)).transpose(1, 2)
         v = v.view(B, T, self.n_heads, C // self.n_heads).transpose(1, 2)
         cos, sin = self.rope_cos[:T][None, None], self.rope_sin[:T][None, None]
         q, k = apply_rope(q, cos, sin), apply_rope(k, cos, sin)
-        out = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0)
+        drop = self.drop_rate if self.training else 0.0
+        out = F.scaled_dot_product_attention(q, k, v, dropout_p=drop)
         out = out.transpose(1, 2).contiguous().view(B, T, C)
         return self.dropout(self.proj(out))
 
+
 class FeedForward(nn.Module):
-    def __init__(self, n_embed):
+    def __init__(self, n_embed, drop_rate):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_embed, 4 * n_embed), nn.ReLU(),
-            nn.Linear(4 * n_embed, n_embed), nn.Dropout(drop_rate))
+            nn.Linear(n_embed, 4 * n_embed),
+            nn.ReLU(),
+            nn.Linear(4 * n_embed, n_embed),
+            nn.Dropout(drop_rate),
+        )
+
     def forward(self, x):
         return self.net(x)
 
+
 class Block(nn.Module):
-    def __init__(self, n_embed, num_heads):
+    def __init__(self, n_embed, num_heads, block_size, drop_rate):
         super().__init__()
-        self.sa = MultiHeadAttention(num_heads)
-        self.ffwd = FeedForward(n_embed)
+        self.sa = MultiHeadAttention(n_embed, num_heads, block_size, drop_rate)
+        self.ffwd = FeedForward(n_embed, drop_rate)
         self.ln1 = nn.LayerNorm(n_embed, elementwise_affine=False)
         self.ln2 = nn.LayerNorm(n_embed, elementwise_affine=False)
         self.adaLN = nn.Linear(n_embed, 4 * n_embed)
+        nn.init.zeros_(self.adaLN.weight)
+        nn.init.zeros_(self.adaLN.bias)
+
     def forward(self, x, temb):
         s1, c1, s2, c2 = self.adaLN(F.silu(temb))[:, None, :].chunk(4, dim=-1)
         x = x + self.sa(self.ln1(x) * (1 + c1) + s1)
         x = x + self.ffwd(self.ln2(x) * (1 + c2) + s2)
         return x
 
-class BLM(nn.Module):
-    def __init__(self):
+
+class TextDiffusion(nn.Module):
+    def __init__(self, n_embed=512, n_layers=6, n_heads=16, block_size=128, drop_rate=0.0):
         super().__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size + 1, n_embed)  # +1 for [MASK]
-        self.blocks = nn.ModuleList([Block(n_embed, num_heads=n_heads) for _ in range(n_layers)])
+        self.n_embed = n_embed
+        self.block_size = block_size
+        self.token_embedding_table = nn.Embedding(vocab_size + 1, n_embed)
+        self.blocks = nn.ModuleList([
+            Block(n_embed, n_heads, block_size, drop_rate) for _ in range(n_layers)
+        ])
         self.ln = nn.LayerNorm(n_embed)
         self.lm_head = nn.Linear(n_embed, vocab_size)
-        self.time_mlp = nn.Sequential(nn.Linear(n_embed, n_embed), nn.SiLU(), nn.Linear(n_embed, n_embed))
+        self.time_mlp = nn.Sequential(
+            nn.Linear(n_embed, n_embed),
+            nn.SiLU(),
+            nn.Linear(n_embed, n_embed),
+        )
+
     def forward(self, idx, t):
-        temb = self.time_mlp(timestep_embedding(t, n_embed))
+        temb = self.time_mlp(timestep_embedding(t, self.n_embed))
         x = self.token_embedding_table(idx)
         for block in self.blocks:
             x = block(x, temb)
@@ -96,8 +122,8 @@ class BLM(nn.Module):
 
     @torch.no_grad()
     def generate(self, n_samples, steps=128, k=20):
-        # MDLM reverse process: start all [MASK], progressively unmask to predicted tokens.
-        x = torch.full((n_samples, block_size), mask_id, device=device)
+        device = next(self.parameters()).device
+        x = torch.full((n_samples, self.block_size), mask_id, device=device)
         ts = torch.linspace(1.0, 0.0, steps + 1, device=device)
         for i in range(steps):
             t = ts[i].expand(n_samples)
@@ -111,37 +137,3 @@ class BLM(nn.Module):
             x0_hat = topk_sample(self(x, ts[-1].expand(n_samples)), k)
             x = torch.where(is_mask, x0_hat, x)
         return x
-
-if __name__ == '__main__':
-    p = argparse.ArgumentParser()
-    p.add_argument('--config', default=None)
-    p.add_argument('--ckpt', default=None)
-    p.add_argument('--steps', type=int, default=None)
-    p.add_argument('--n-samples', dest='n_samples', type=int, default=None)
-    p.add_argument('--device', default=None)
-    p.add_argument('--topk', type=int, default=None)
-    args = p.parse_args()
-    cfg = {}
-    if args.config:
-        import yaml
-        cfg = yaml.safe_load(open(args.config, encoding='utf-8')) or {}
-    ckpt = args.ckpt or cfg.get('ckpt') or 'ckpt_mdlm_best.pt'
-    steps = args.steps or cfg.get('steps') or 256
-    n_samples = args.n_samples or cfg.get('n_samples') or 6
-    topk = args.topk or cfg.get('topk') or 20
-    device = args.device or cfg.get('device') or device
-    if device == 'cuda' and not torch.cuda.is_available():
-        device = 'cpu'
-
-    torch.manual_seed(0)
-    model = BLM().to(device)
-    ck = torch.load(ckpt, map_location=device, weights_only=False)
-    model.load_state_dict(ck['model'])
-    print(f"loaded {ckpt} @ step {ck['epoch']} | best_val {ck['best_val']:.2f}")
-    model.eval()
-
-    print(f"\n{'='*70}\n{steps} denoising steps\n{'='*70}")
-    out = model.generate(n_samples=n_samples, steps=steps, k=topk)
-    for j, row in enumerate(out.tolist()):
-        print(f"\n--- sample {j+1} ({steps} steps) ---")
-        print(decode(row))

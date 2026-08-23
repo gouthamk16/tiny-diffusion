@@ -11,6 +11,7 @@ SEQ = 128
 MIN_BATCH, OPT_BATCH, MAX_BATCH = 1, 1, 8
 CALIB_SHAPES = f"idx:{OPT_BATCH}x{SEQ},t:{OPT_BATCH}"
 
+
 def prepare_onnx(onnx_path: Path, precision: str, calib: Path | None, max_samples: int) -> Path:
     if precision == "fp32":
         return onnx_path
@@ -48,6 +49,7 @@ def prepare_onnx(onnx_path: Path, precision: str, calib: Path | None, max_sample
     print(f"cast {cast_path}")
     return cast_path
 
+
 def build(onnx_path: Path, engine_path: Path, precision: str, calib: Path | None, max_samples: int):
     onnx_path = prepare_onnx(onnx_path, precision, calib, max_samples)
 
@@ -75,12 +77,14 @@ def build(onnx_path: Path, engine_path: Path, precision: str, calib: Path | None
     if engine is None:
         raise RuntimeError("engine build failed")
 
+    engine_path.parent.mkdir(parents=True, exist_ok=True)
     engine_path.write_bytes(bytes(engine))
     print(f"wrote {engine_path} ({engine.nbytes / 1e6:.1f} MB)")
 
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--onnx", default="mdlm_best.onnx")
+    p.add_argument("--onnx", default="artifacts/mdlm_best.onnx")
     p.add_argument("--engine", default=None)
     p.add_argument("--precision", choices=["fp32", "fp16", "bf16", "fp8"], default="fp16")
     p.add_argument("--calib", default=None, help="calib.npz from collect_calib.py (fp8 only)")
@@ -89,6 +93,6 @@ if __name__ == "__main__":
 
     onnx_path = Path(args.onnx)
     suffix = "" if args.precision == "fp32" else f"_{args.precision}"
-    engine_path = Path(args.engine or onnx_path.stem + suffix + ".engine")
+    engine_path = Path(args.engine or onnx_path.with_name(onnx_path.stem + suffix + ".engine"))
     calib = Path(args.calib) if args.calib else None
     build(onnx_path, engine_path, args.precision, calib, args.max_samples)

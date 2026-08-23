@@ -16,5 +16,5 @@ arch:
   n_heads: 16
   drop_rate: 0.0
 ckpt:
-  latest: ckpt_mdlm.pt
-  best: ckpt_mdlm_best.pt
+  latest: artifacts/ckpt.pt
+  best: artifacts/ckpt_best.pt

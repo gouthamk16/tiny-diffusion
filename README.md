@@ -29,7 +29,7 @@ Both use the exact same backbone: a 6-layer, 512-hidden, 16-head bidirectional T
 
 Because the two losses aren't on the same numeric scale (DWDSE score-entropy vs weighted cross-entropy), comparing raw validation loss between them is meaningless. That's why the second autoresearch run switched to judging experiments by **generative perplexity under GPT-2** plus a **distinct-2 diversity** guardrail (to catch a model that games low perplexity by repeating itself), instead of validation loss.
 
-The difference shows up clearly in the generated text. SEDD's samples (see `diffusion_sedd/generated_samples_73k.txt`) are readable but grammatically rough, with dropped words and odd phrasing throughout even after 75k steps. MDLM's samples (see `diffusion_mdlm/generated_samples_mdlm.txt`) are full, grammatical sentences with a real story shape, and its final generative perplexity (24.75) lands right around what real TinyStories text scores under the same GPT-2 model (about 30-50).
+The difference shows up clearly in the generated text. SEDD's samples (see `diffusion_sedd/artifacts/generated_samples_73k.txt`) are readable but grammatically rough, with dropped words and odd phrasing throughout even after 75k steps. MDLM's samples (see `diffusion_mdlm/artifacts/generated_samples.txt`) are full, grammatical sentences with a real story shape, and its final generative perplexity (24.75) lands right around what real TinyStories text scores under the same GPT-2 model (about 30-50).
 
 ## Autoresearch: what worked, what didn't
 
@@ -37,15 +37,15 @@ Neither model was tuned by hand. Following Karpathy's [autoresearch](https://git
 
 ### SEDD run (`diffusion_sedd/`, 5-minute budget per experiment)
 
-![SEDD autoresearch progress](diffusion_sedd/ar_progress.png)
+![SEDD autoresearch progress](diffusion_sedd/artifacts/ar_progress.png)
 
-Guided by validation loss. Over **52 experiments (22 kept)** it drove val loss from **325k down to 198k, about a 39% improvement**, entirely on its own. Most of the early gains came from speed hacks that simply let the step-starved model train more in the fixed budget: TF32, fused flash-attention, a bf16 pass, and a closed-form rewrite of the score-entropy loss, followed by a run of small architecture wins (QK-norm, sinusoidal + adaLN time conditioning, 16 heads, 6 layers). The single biggest find was swapping the learned position embedding for RoPE, which cut the loss by ~28% in one shot. Dead ends it correctly walked away from: bigger models, weight tying, SwiGLU, importance sampling. Every experiment, kept or not, is logged with a one-line reason in `diffusion_sedd/results.tsv`.
+Guided by validation loss. Over **52 experiments (22 kept)** it drove val loss from **325k down to 198k, about a 39% improvement**, entirely on its own. Most of the early gains came from speed hacks that simply let the step-starved model train more in the fixed budget: TF32, fused flash-attention, a bf16 pass, and a closed-form rewrite of the score-entropy loss, followed by a run of small architecture wins (QK-norm, sinusoidal + adaLN time conditioning, 16 heads, 6 layers). The single biggest find was swapping the learned position embedding for RoPE, which cut the loss by ~28% in one shot. Dead ends it correctly walked away from: bigger models, weight tying, SwiGLU, importance sampling. Every experiment, kept or not, is logged with a one-line reason in `diffusion_sedd/artifacts/results.tsv`.
 
 ### MDLM run (`diffusion_mdlm/`, 10-minute budget per experiment)
 
-![MDLM autoresearch progress](diffusion_mdlm/ar_progress_mdlm.png)
+![MDLM autoresearch progress](diffusion_mdlm/artifacts/ar_progress.png)
 
-This run started from scratch architecturally, trying different diffusion formulations entirely rather than just tuning the SEDD setup further, and was guided by generative perplexity (+ distinct-2 as a guardrail) instead of loss, for the reason above. Over **12 experiments (7 kept)** it took the tuned SEDD baseline (gen_ppl 350.5) down to **gen_ppl 42.6, an 8x improvement**. What worked: switching to MDLM's masked/absorbing formulation (350 to 222 in one change), tuning the learning rate up to 3e-3, using 256 sampling steps instead of 128 or 512 (finer unmasking, the single biggest win: 186 to 115), and top-k=20 filtered sampling to drop the low-probability tail during generation (115 to 43). What didn't: 12 transformer layers (worse, the model is step-bound not capacity-bound), a 512-step sampler (over-fine, worse than 256), top-k=10 (tied on perplexity but visibly hurt diversity and got flagged by the distinct-2 guardrail, so it was correctly discarded), and dropping the adaLN time-conditioning (worse despite the extra sampling steps). Full log in `diffusion_mdlm/results_v2.tsv`.
+This run started from scratch architecturally, trying different diffusion formulations entirely rather than just tuning the SEDD setup further, and was guided by generative perplexity (+ distinct-2 as a guardrail) instead of loss, for the reason above. Over **12 experiments (7 kept)** it took the tuned SEDD baseline (gen_ppl 350.5) down to **gen_ppl 42.6, an 8x improvement**. What worked: switching to MDLM's masked/absorbing formulation (350 to 222 in one change), tuning the learning rate up to 3e-3, using 256 sampling steps instead of 128 or 512 (finer unmasking, the single biggest win: 186 to 115), and top-k=20 filtered sampling to drop the low-probability tail during generation (115 to 43). What didn't: 12 transformer layers (worse, the model is step-bound not capacity-bound), a 512-step sampler (over-fine, worse than 256), top-k=10 (tied on perplexity but visibly hurt diversity and got flagged by the distinct-2 guardrail, so it was correctly discarded), and dropping the adaLN time-conditioning (worse despite the extra sampling steps). Full log in `diffusion_mdlm/artifacts/results.tsv`.
 
 The best MDLM config was then trained fully (not time-boxed) for 100,000 steps on the complete ~540M-token dataset, saving a checkpoint whenever validation loss beat every prior evaluation, and reached a final gen_ppl of 24.75.
 
@@ -56,11 +56,10 @@ Both models train on `karpathy/tinystories-gpt4-clean`, a set of very simple sho
 ## Files
 
 - `run.py` (`run.sh` / `run.bat`) is the root entry point. YAML configs live in `configs/`.
-- `diffusion_sedd/` and `diffusion_mdlm/` each contain their own copy of the model script (`ton-v1-sedd.py` / `ton-v1-mdlm.py`), generation script (`gen.py` / `gen_mdlm.py`), inference benchmark script (`bench_gen.py` / `bench_gen_mdlm.py`), autoresearch plotting script (`plot_progress.py` / `plot_progress_mdlm.py`), experiment log (`results.tsv` / `results_v2.tsv`), autoresearch progress graph, training loss curve, generated story samples, timing benchmark JSON, and best model checkpoint.
-- `diffusion_mdlm/` also has ONNX/TensorRT scripts: `export_onnx.py`, `collect_calib.py`, `build_trt.py`, `infer_trt.py`, `bench_gen_trt.py`.
+- `diffusion_mdlm/` and `diffusion_sedd/` each have `model.py` (`TextDiffusion`), `train.py`, `gen.py`, `bench.py`, `plot.py`, and samples / timings / experiment logs under `artifacts/`. MDLM also has TensorRT scripts under `trt/`.
 - `tinystories_gpt2_full.bin` at the repo root is the tokenized dataset, shared by both folders.
 
-If you want inference timings, memory usage, or the raw sample outputs for either experiment, they're in that experiment's folder: `diffusion_sedd/gen_timing.json` and `diffusion_mdlm/gen_timing_mdlm.json` for benchmarks, `generated_samples*.txt` for stories.
+If you want inference timings, memory usage, or the raw sample outputs for either experiment, they're under `artifacts/`: `diffusion_sedd/artifacts/gen_timing.json` and `diffusion_mdlm/artifacts/gen_timing.json` for PyTorch benches, `fp16_timing.json` / `fp8_timing.json` for TensorRT, `generated_samples*.txt` for stories.
 
 ## Commands
 
@@ -96,7 +95,7 @@ python run.py bench --config configs/infer_mdlm.yaml --backend tensorrt --precis
 python run.py bench --config configs/infer_sedd.yaml --steps 128 --n-runs 20
 ```
 
-Writes `diffusion_sedd/gen_timing.json`, `diffusion_mdlm/gen_timing_mdlm.json`, or `mdlm_best_fp16_timing.json` for TRT.
+Writes `diffusion_sedd/artifacts/gen_timing.json`, `diffusion_mdlm/artifacts/gen_timing.json`, or `diffusion_mdlm/artifacts/fp16_timing.json` for TRT.
 
 **Infer (TensorRT, MDLM only)**
 
@@ -115,29 +114,29 @@ The experiment folders still work if you `cd` into them (dataset cache is `../ti
 
 ```
 cd diffusion_sedd
-python ton-v1-sedd.py       # train (resumes from ckpt_full.pt)
-python gen.py               # generate from ckpt_full.pt
-python bench_gen.py         # -> gen_timing.json
+python train.py             # train (resumes from artifacts/ckpt.pt)
+python gen.py               # generate from artifacts/ckpt.pt
+python bench.py             # -> artifacts/gen_timing.json
 
 cd ../diffusion_mdlm
-python ton-v1-mdlm.py       # train (resumes from ckpt_mdlm.pt)
-python gen_mdlm.py          # generate from ckpt_mdlm_best.pt
-python bench_gen_mdlm.py    # -> gen_timing_mdlm.json
+python train.py             # train (resumes from artifacts/ckpt.pt)
+python gen.py               # generate from artifacts/ckpt_best.pt
+python bench.py             # -> artifacts/gen_timing.json
 ```
 
-Low-level TensorRT (all from `diffusion_mdlm/`, with `ckpt_mdlm_best.pt` present):
+Low-level TensorRT (all from `diffusion_mdlm/`, with `artifacts/ckpt_best.pt` present):
 
 ```
-python export_onnx.py --ckpt ckpt_mdlm_best.pt --out mdlm_best.onnx
-python collect_calib.py --seeds 16 --steps 128   # fp8 only -> calib.npz
-python build_trt.py --precision fp16             # -> mdlm_best_fp16.engine
-python build_trt.py --precision fp8 --calib calib.npz
-python infer_trt.py --engine mdlm_best_fp16.engine --compare-pytorch
-python bench_gen_trt.py --engine mdlm_best_fp16.engine
-python bench_gen_trt.py --engine mdlm_best_fp16.engine --print --n-samples 6
+python trt/export_onnx.py --ckpt artifacts/ckpt_best.pt --out artifacts/mdlm_best.onnx
+python trt/collect_calib.py --seeds 16 --steps 128   # fp8 only -> artifacts/calib.npz
+python trt/build.py --precision fp16                 # -> artifacts/mdlm_best_fp16.engine
+python trt/build.py --precision fp8 --calib artifacts/calib.npz
+python trt/infer.py --engine artifacts/mdlm_best_fp16.engine --compare-pytorch
+python trt/bench.py --engine artifacts/mdlm_best_fp16.engine
+python trt/bench.py --engine artifacts/mdlm_best_fp16.engine --print --n-samples 6
 ```
 
-`--max-samples 512` on `build_trt.py` subsamples `calib.npz` for faster fp8 builds. `infer_trt.py` times one forward pass; `bench_gen_trt.py` times full generation (JSON) or `--print`s stories. Top-k sampling still runs in PyTorch.
+`--max-samples 512` on `trt/build.py` subsamples `calib.npz` for faster fp8 builds. `trt/infer.py` times one forward pass; `trt/bench.py` times full generation (JSON) or `--print`s stories. Top-k sampling still runs in PyTorch.
 
 On an RTX 4060 Laptop GPU (1 sample, 256 steps, 20 runs):
 

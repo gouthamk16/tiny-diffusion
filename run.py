@@ -7,9 +7,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DIRS = {"mdlm": ROOT / "diffusion_mdlm", "sedd": ROOT / "diffusion_sedd"}
-TRAIN = {"mdlm": "ton-v1-mdlm.py", "sedd": "ton-v1-sedd.py"}
-GEN = {"mdlm": "gen_mdlm.py", "sedd": "gen.py"}
-BENCH = {"mdlm": "bench_gen_mdlm.py", "sedd": "bench_gen.py"}
+TRAIN = {"mdlm": "train.py", "sedd": "train.py"}
+GEN = {"mdlm": "gen.py", "sedd": "gen.py"}
+BENCH = {"mdlm": "bench.py", "sedd": "bench.py"}
 
 
 def load_yaml(path):
@@ -66,7 +66,7 @@ def cmd_infer(cfg, config_path, args):
     steps = cfg.get("steps", 256)
     n_samples = cfg.get("n_samples", 6)
     topk = cfg.get("topk", 20)
-    gen = [sys.executable, "bench_gen_trt.py", "--engine", engine, "--print",
+    gen = [sys.executable, "trt/bench.py", "--engine", engine, "--print",
            "--n-samples", str(n_samples), "--steps", str(steps), "--topk", str(topk)]
     run(gen, cwd)
 
@@ -75,22 +75,23 @@ def trt_engine(cfg, args, cwd):
     if cfg.get("model") != "mdlm":
         sys.exit("TensorRT is only wired for MDLM")
     precision = cfg.get("precision", "fp16")
-    ckpt = cfg.get("ckpt", "ckpt_mdlm_best.pt")
-    onnx = cfg.get("onnx", "mdlm_best.onnx")
+    ckpt = cfg.get("ckpt", "artifacts/ckpt_best.pt")
+    onnx = cfg.get("onnx", "artifacts/mdlm_best.onnx")
     stem = Path(onnx).stem
     suffix = "" if precision == "fp32" else f"_{precision}"
-    engine = args.engine or cfg.get("engine") or f"{stem}{suffix}.engine"
+    default_engine = str(Path(onnx).with_name(f"{stem}{suffix}.engine"))
+    engine = args.engine or cfg.get("engine") or default_engine
     if args.precision:
-        engine = args.engine or f"{stem}{suffix}.engine"
-    calib = cfg.get("calib", "calib.npz")
+        engine = args.engine or default_engine
+    calib = cfg.get("calib", "artifacts/calib.npz")
     rebuild = bool(cfg.get("rebuild", False))
     py = sys.executable
     if rebuild or not (cwd / onnx).exists():
-        run([py, "export_onnx.py", "--ckpt", ckpt, "--out", onnx], cwd)
+        run([py, "trt/export_onnx.py", "--ckpt", ckpt, "--out", onnx], cwd)
     if precision == "fp8" and (rebuild or not (cwd / calib).exists()):
-        run([py, "collect_calib.py", "--ckpt", ckpt, "--out", calib], cwd)
+        run([py, "trt/collect_calib.py", "--ckpt", ckpt, "--out", calib], cwd)
     if rebuild or not (cwd / engine).exists():
-        build = [py, "build_trt.py", "--onnx", onnx, "--engine", engine, "--precision", precision]
+        build = [py, "trt/build.py", "--onnx", onnx, "--engine", engine, "--precision", precision]
         if precision == "fp8":
             build += ["--calib", calib]
         run(build, cwd)
@@ -121,7 +122,7 @@ def cmd_bench(cfg, config_path, args):
     if backend != "tensorrt":
         sys.exit(f"unknown backend {backend!r}; expected torch or tensorrt")
     engine = trt_engine(cfg, args, cwd)
-    cmd = [sys.executable, "bench_gen_trt.py", "--engine", engine,
+    cmd = [sys.executable, "trt/bench.py", "--engine", engine,
            "--n-samples", str(n_samples), "--n-runs", str(n_runs)]
     if steps:
         cmd += ["--steps", str(steps)]

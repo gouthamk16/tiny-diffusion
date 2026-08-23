@@ -1,13 +1,18 @@
 import argparse
+import sys
 import types
+from pathlib import Path
 
 import torch
 import torch.nn as nn
-from gen_mdlm import BLM, vocab_size
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from model import TextDiffusion, vocab_size
+
 
 def export(ckpt: str, out: str):
     device = "cpu"
-    model = BLM().to(device)
+    model = TextDiffusion().to(device)
     ck = torch.load(ckpt, map_location=device, weights_only=False)
     model.load_state_dict(ck["model"])
     model.eval()
@@ -24,6 +29,7 @@ def export(ckpt: str, out: str):
     idx = torch.randint(0, vocab_size + 1, (B, T), dtype=torch.long, device=device)
     t = torch.rand(B, device=device)
 
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
     torch.onnx.export(
         model,
         (idx, t),
@@ -40,9 +46,10 @@ def export(ckpt: str, out: str):
     )
     print(f"wrote {out}")
 
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--ckpt", default="ckpt_mdlm_best.pt")
-    p.add_argument("--out", default="mdlm_best.onnx")
+    p.add_argument("--ckpt", default="artifacts/ckpt_best.pt")
+    p.add_argument("--out", default="artifacts/mdlm_best.onnx")
     args = p.parse_args()
     export(args.ckpt, args.out)

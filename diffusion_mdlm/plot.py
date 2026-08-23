@@ -1,21 +1,28 @@
-import csv, matplotlib
+import csv
+import os
+
+import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-rows = list(csv.reader(open('results_v2.tsv'), delimiter='\t'))[1:]
-xs, keep_x, keep_y, disc_x, disc_y = [], [], [], [], []
+os.makedirs('artifacts', exist_ok=True)
+rows = list(csv.reader(open('artifacts/results.tsv'), delimiter='\t'))[1:]
+keep_x, keep_y, disc_x, disc_y = [], [], [], []
 best, best_x, best_y = float('inf'), [], []
 mdlm_x = None
 for i, r in enumerate(rows, 1):
     ppl, status, desc = float(r[2]), r[5], r[6]
     if status == 'keep':
         best = min(best, ppl)
-        keep_x.append(i); keep_y.append(ppl)
+        keep_x.append(i)
+        keep_y.append(ppl)
         if 'MDLM masked/absorbing' in desc:
             mdlm_x = i
     else:
-        disc_x.append(i); disc_y.append(ppl)
-    best_x.append(i); best_y.append(best)
+        disc_x.append(i)
+        disc_y.append(ppl)
+    best_x.append(i)
+    best_y.append(best)
 
 fig, ax = plt.subplots(figsize=(9, 5))
 ax.scatter(disc_x, disc_y, s=22, c='#c9c9c9', label='discarded', zorder=2)
@@ -37,5 +44,5 @@ ax.set_title('Autoresearch: architecture + loss search guided by gen_ppl (autore
 ax.grid(True, alpha=0.25)
 ax.legend(loc='upper right', frameon=False)
 fig.tight_layout()
-fig.savefig('ar_progress_mdlm.png', dpi=120)
+fig.savefig('artifacts/ar_progress.png', dpi=120)
 print(f'kept {len(keep_x)}, discarded {len(disc_x)}; baseline {best_y[0]:,.1f} -> final {best_y[-1]:,.1f}')

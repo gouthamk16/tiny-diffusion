@@ -1,13 +1,18 @@
 import argparse
+import sys
+from pathlib import Path
 
 import numpy as np
 import torch
-from gen_mdlm import BLM, block_size, mask_id, topk_sample
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from model import TextDiffusion, block_size, mask_id, topk_sample
+
 
 @torch.no_grad()
 def collect(seeds: int, steps: int, batch: int, ckpt: str):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = BLM().to(device).eval()
+    model = TextDiffusion().to(device).eval()
     ck = torch.load(ckpt, map_location=device, weights_only=False)
     model.load_state_dict(ck["model"])
 
@@ -43,15 +48,17 @@ def collect(seeds: int, steps: int, batch: int, ckpt: str):
     t = np.array(t_rows, dtype=np.float32)
     return idx, t
 
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--ckpt", default="ckpt_mdlm_best.pt")
-    p.add_argument("--out", default="calib.npz")
+    p.add_argument("--ckpt", default="artifacts/ckpt_best.pt")
+    p.add_argument("--out", default="artifacts/calib.npz")
     p.add_argument("--seeds", type=int, default=16)
     p.add_argument("--steps", type=int, default=128)
     p.add_argument("--batch", type=int, default=1)
     args = p.parse_args()
 
     idx, t = collect(args.seeds, args.steps, args.batch, args.ckpt)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     np.savez(args.out, idx=idx, t=t)
     print(f"wrote {args.out} | {len(t)} samples | idx {idx.shape} t {t.shape}")

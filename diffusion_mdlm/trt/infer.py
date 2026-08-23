@@ -1,14 +1,20 @@
 import argparse
+import sys
 import time
+from pathlib import Path
 
 import torch
 import tensorrt as trt
-from gen_mdlm import BLM, vocab_size
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from model import TextDiffusion, vocab_size
+
 
 def load_engine(path: str):
     logger = trt.Logger(trt.Logger.WARNING)
     with open(path, "rb") as f:
         return trt.Runtime(logger).deserialize_cuda_engine(f.read())
+
 
 def run_trt(engine, batch: int, warmup: int, iters: int):
     ctx = engine.create_execution_context()
@@ -35,10 +41,11 @@ def run_trt(engine, batch: int, warmup: int, iters: int):
     ms = (time.perf_counter() - t0) / iters * 1000
     return logits, ms
 
+
 @torch.no_grad()
-def run_pytorch(batch: int, warmup: int, iters: int):
-    model = BLM().cuda().eval()
-    ck = torch.load("ckpt_mdlm_best.pt", map_location="cuda", weights_only=False)
+def run_pytorch(batch: int, warmup: int, iters: int, ckpt: str):
+    model = TextDiffusion().cuda().eval()
+    ck = torch.load(ckpt, map_location="cuda", weights_only=False)
     model.load_state_dict(ck["model"])
 
     idx = torch.randint(0, vocab_size + 1, (batch, 128), device="cuda", dtype=torch.long)
@@ -55,9 +62,11 @@ def run_pytorch(batch: int, warmup: int, iters: int):
     ms = (time.perf_counter() - t0) / iters * 1000
     return model(idx, t), ms
 
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--engine", default="mdlm_best_fp16.engine")
+    p.add_argument("--engine", default="artifacts/mdlm_best_fp16.engine")
+    p.add_argument("--ckpt", default="artifacts/ckpt_best.pt")
     p.add_argument("--batch", type=int, default=1)
     p.add_argument("--warmup", type=int, default=20)
     p.add_argument("--iters", type=int, default=100)
@@ -69,7 +78,7 @@ if __name__ == "__main__":
     print(f"trt logits {tuple(logits.shape)} | {trt_ms:.2f} ms/step (batch={args.batch})")
 
     if args.compare_pytorch:
-        pt_logits, pt_ms = run_pytorch(args.batch, args.warmup, args.iters)
+        pt_logits, pt_ms = run_pytorch(args.batch, args.warmup, args.iters, args.ckpt)
         diff = (logits - pt_logits).abs().max().item()
         print(f"pt  logits {tuple(pt_logits.shape)} | {pt_ms:.2f} ms/step")
         print(f"max |trt - pt| = {diff:.4f}")

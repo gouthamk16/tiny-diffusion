@@ -1,12 +1,12 @@
 model: mdlm
 backend: torch
 device: cuda
-ckpt: ckpt_mdlm_best.pt
+ckpt: artifacts/ckpt_best.pt
 steps: 256
 n_samples: 6
 topk: 20
 precision: fp16
-onnx: mdlm_best.onnx
-engine: mdlm_best_fp16.engine
-calib: calib.npz
+onnx: artifacts/mdlm_best.onnx
+engine: artifacts/mdlm_best_fp16.engine
+calib: artifacts/calib.npz
 rebuild: false
